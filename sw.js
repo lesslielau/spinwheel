@@ -1,5 +1,7 @@
-/* 幸运转盘 Service Worker:首次访问后缓存,主屏幕图标可离线打开(需 https 部署) */
-const CACHE = 'spinwheel-v1';
+/* 幸运转盘 Service Worker
+   策略:stale-while-revalidate —— 先秒回缓存保证离线可用,
+   同时后台拉取最新版本写入缓存,下次打开即为新版。 */
+const CACHE = 'spinwheel-v3';
 const ASSETS = ['./', './index.html', './sw.js'];
 
 self.addEventListener('install', e => {
@@ -15,15 +17,17 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if(e.request.method !== 'GET') return;
+  if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request, {ignoreSearch: true}).then(cached =>
-      cached ||
-      fetch(e.request).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
+    caches.match(e.request, {ignoreSearch: true}).then(cached => {
+      const net = fetch(e.request).then(res => {
+        if (res && res.ok && new URL(e.request.url).origin === location.origin) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
         return res;
-      }).catch(() => caches.match('./index.html'))
-    )
+      }).catch(() => cached);
+      return cached || net;
+    })
   );
 });
