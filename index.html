@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="幸运转盘">
+<meta name="theme-color" content="#f2f2f7">
+<title>幸运转盘</title>
+<style>
+:root{
+  --bg:#f2f2f7; --card:#fff; --text:#1c1c1e; --sub:#8e8e93;
+  --grad:linear-gradient(90deg,#ff9500,#e5484d);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+     background:var(--bg); color:var(--text); touch-action:manipulation;}
+#app{max-width:480px;margin:0 auto;}
+
+.page{display:none;flex-direction:column;min-height:100dvh;}
+.page.active{display:flex;}
+
+header.bar{display:flex;align-items:center;justify-content:space-between;
+  padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;}
+header.bar h1{font-size:17px;font-weight:600;margin:0;}
+header.bar .spacer{width:34px;}
+.iconBtn{border:none;background:none;font-size:26px;color:#007aff;padding:2px 6px;cursor:pointer;line-height:1;}
+
+main.wheel-page{flex:1;display:flex;flex-direction:column;
+  padding:0 20px calc(env(safe-area-inset-bottom) + 16px);}
+
+.wheel-wrap{position:relative;width:min(86vw,330px);aspect-ratio:1;margin:16px auto 6px;cursor:pointer;}
+#wheelSvg{display:block;width:100%;height:100%;
+  transition:transform 4s cubic-bezier(.12,.72,.24,1);}
+.pointer{position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;
+  border-top:25px solid #e5484d;filter:drop-shadow(0 2px 2px rgba(0,0,0,.3));z-index:2;}
+
+#status{text-align:center;color:var(--sub);font-size:14px;min-height:20px;margin:8px 0 18px;}
+#spinBtn{border:none;border-radius:26px;background:var(--grad);color:#fff;font-size:17px;font-weight:600;
+  padding:15px 0;width:100%;cursor:pointer;box-shadow:0 6px 16px rgba(255,80,60,.35);}
+#spinBtn:disabled{opacity:.4;box-shadow:none;}
+
+#itemList{list-style:none;margin:0 16px;padding:0;background:var(--card);
+  border-radius:14px;overflow:hidden;}
+#itemList li{display:flex;align-items:center;gap:10px;padding:12px 14px;
+  border-bottom:1px solid #f0f0f2;min-height:50px;}
+#itemList li:last-child{border-bottom:none;}
+#itemList li.empty{justify-content:center;color:var(--sub);font-size:14px;}
+.dot{width:12px;height:12px;border-radius:50%;flex:none;}
+.name{flex:1;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ops{display:flex;gap:6px;flex:none;}
+.ops button{border:none;background:#f2f2f7;color:var(--text);border-radius:8px;
+  font-size:13px;padding:6px 9px;cursor:pointer;min-width:34px;}
+.ops button.danger{color:#e5484d;}
+.ops button:disabled{opacity:.3;}
+.editInput{flex:1;border:1.5px solid #007aff;border-radius:8px;padding:8px 10px;
+  font-size:15px;outline:none;min-width:0;}
+.addRow{display:flex;gap:10px;margin:14px 16px;}
+.addRow input{flex:1;border:1.5px solid #e5e5ea;border-radius:12px;padding:12px 14px;
+  font-size:16px;outline:none;background:#fff;min-width:0;}
+.addRow input:focus{border-color:#007aff;}
+.addRow button{border:none;border-radius:12px;background:#007aff;color:#fff;
+  font-size:15px;font-weight:600;padding:0 20px;cursor:pointer;}
+.hint{color:var(--sub);font-size:12px;text-align:center;margin:8px 16px 20px;}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;
+  align-items:center;justify-content:center;z-index:10;padding:24px;}
+.overlay[hidden]{display:none;}
+.card{background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;
+  text-align:center;animation:pop .35s cubic-bezier(.2,1.4,.4,1);}
+@keyframes pop{from{transform:scale(.7);opacity:0;}}
+.card .emoji{font-size:44px;}
+.card h2{margin:8px 0 2px;font-size:17px;color:var(--sub);font-weight:500;}
+.card .rname{font-size:30px;font-weight:700;margin:6px 0 20px;color:#e5484d;word-break:break-all;}
+.card .btns{display:flex;flex-direction:column;gap:10px;}
+.card button{border:none;border-radius:22px;padding:13px;font-size:16px;font-weight:600;cursor:pointer;}
+.card button:not(.primary){background:#f2f2f7;color:var(--text);}
+.card .primary{background:var(--grad);color:#fff;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 主页面:转盘 -->
+  <section id="pageWheel" class="page active">
+    <header class="bar">
+      <span class="spacer"></span>
+      <h1>幸运转盘</h1>
+      <button class="iconBtn" id="manageBtn" aria-label="选项管理">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </header>
+    <main class="wheel-page">
+      <div class="wheel-wrap" id="wheelWrap">
+        <div class="pointer"></div>
+        <svg id="wheelSvg" viewBox="-100 -100 200 200" aria-label="转盘"></svg>
+      </div>
+      <div id="status">点击转盘或下方按钮开始</div>
+      <button id="spinBtn">开始抽取</button>
+    </main>
+  </section>
+
+  <!-- 管理页面:选项增删改排序 -->
+  <section id="pageManage" class="page">
+    <header class="bar">
+      <button class="iconBtn" id="backBtn" aria-label="返回">‹</button>
+      <h1>选项管理</h1>
+      <span class="spacer"></span>
+    </header>
+    <ul id="itemList"></ul>
+    <div class="addRow">
+      <input id="newName" placeholder="输入选项名称" maxlength="30">
+      <button id="addBtn">添加</button>
+    </div>
+    <p class="hint">↑↓ 调整顺序,选项从转盘正上方起顺时针排列 · 数据保存在本机浏览器里</p>
+  </section>
+
+  <!-- 结果弹窗 -->
+  <div id="resultOverlay" class="overlay" hidden>
+    <div class="card">
+      <div class="emoji">🎉</div>
+      <h2>抽中了</h2>
+      <p class="rname" id="resultName"></p>
+      <div class="btns">
+        <button class="primary" id="againBtn">再转一次</button>
+        <button id="okBtn">好的</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+/* ================= 数据 ================= */
+
+const PALETTE = ['#e5484d','#f76b15','#ffb224','#46a758','#12a594','#0091ff',
+                 '#3e63dd','#6e56cf','#d6409f','#00a8a8','#8d2fce','#ad7f58'];
+const STORE_KEY = 'spinwheel.items';
+const SPIN_MS = 4000;
+
+function uid(){
+  return (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
+
+let items = loadItems();
+let rotation = 0;
+let spinning = false;
+let lastResult = null;
+let editingId = null;
+
+function loadItems(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const arr = JSON.parse(raw);
+      if(Array.isArray(arr) && arr.length) return arr;
+    }
+  }catch(e){}
+  return ['火锅','烤肉','寿司','汉堡','沙拉','麻辣烫'].map(name => ({id: uid(), name}));
+}
+function saveItems(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(items)); }catch(e){}
+}
+function commit(){
+  saveItems(); renderWheel(); renderList(); updateStatus(); updateSpinBtn();
+}
+
+/* ================= 工具 ================= */
+
+const color = i => PALETTE[((i % PALETTE.length) + PALETTE.length) % PALETTE.length];
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* 角度从正上方(0°)起顺时针 → SVG 坐标 */
+function polar(deg, r){
+  const rad = deg * Math.PI / 180;
+  return {x: +(r * Math.sin(rad)).toFixed(3), y: +(-r * Math.cos(rad)).toFixed(3)};
+}
+
+/* ================= 转盘绘制 ================= */
+
+function renderWheel(){
+  const svg = document.getElementById('wheelSvg');
+  const r = 95;
+
+  if(!items.length){
+    svg.innerHTML =
+      `<circle r="${r}" fill="#e9e9ee"/>` +
+      `<text y="-4" text-anchor="middle" font-size="12" fill="#8e8e93">暂无选项</text>` +
+      `<text y="14" text-anchor="middle" font-size="12" fill="#8e8e93">点右上角按钮添加</text>`;
+    return;
+  }
+
+  const n = items.length;
+  const sec = 360 / n;
+  const fontSize = n <= 8 ? 15 : n <= 14 ? 12 : 10;
+  const maxChars = n <= 6 ? 8 : n <= 10 ? 6 : n <= 16 ? 4 : 3;
+
+  let html = '';
+  if(n === 1){
+    html += `<circle r="${r}" fill="${color(0)}" stroke="#fff" stroke-width="1.2"/>`;
+  } else {
+    items.forEach((it, i) => {
+      const a0 = i * sec, a1 = (i + 1) * sec;
+      const p0 = polar(a0, r), p1 = polar(a1, r);
+      const large = (a1 - a0) > 180 ? 1 : 0;
+      html += `<path d="M0,0 L${p0.x},${p0.y} A${r},${r} 0 ${large} 1 ${p1.x},${p1.y} Z"` +
+              ` fill="${color(i)}" stroke="#fff" stroke-width="1.2"/>`;
+    });
+  }
+
+  items.forEach((it, i) => {
+    // 单选项时文字保持在正上方正向显示
+    const mid = (n === 1) ? 0 : i * sec + sec / 2;
+    const label = it.name.length > maxChars ? it.name.slice(0, maxChars) + '…' : it.name;
+    html += `<text transform="rotate(${mid.toFixed(2)}) translate(0,${(-r * 0.68).toFixed(1)})"` +
+            ` text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}"` +
+            ` font-weight="600" fill="#fff" style="paint-order:stroke;stroke:rgba(0,0,0,.28);stroke-width:2px">` +
+            `${escapeHtml(label)}</text>`;
+  });
+
+  html += `<circle r="${r}" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="3"/>`;
+  svg.innerHTML = html;
+}
+
+/* ================= 抽取(先定结果再反推角度,和原生版同一套数学) ================= */
+
+function spin(){
+  if(spinning || !items.length) return;
+  spinning = true;
+  lastResult = null;
+  hideResult();
+  updateStatus(); updateSpinBtn();
+
+  const n = items.length;
+  const sec = 360 / n;
+  const index = Math.floor(Math.random() * n);
+  const jitter = (Math.random() * 0.7 - 0.35) * sec;
+  const theta = index * sec + sec / 2 + jitter;   // 指针命中的转盘角度
+
+  const turns = 6 + Math.floor(Math.random() * 4);
+  const currentMod = ((rotation % 360) + 360) % 360;
+  const target = (((-theta) % 360) + 360) % 360;
+  const delta = ((target - currentMod) % 360 + 360) % 360;
+
+  rotation += turns * 360 + delta;
+  document.getElementById('wheelSvg').style.transform = `rotate(${rotation}deg)`;
+
+  setTimeout(() => {
+    spinning = false;
+    lastResult = items[index];
+    showResult(lastResult);
+    updateStatus(); updateSpinBtn();
+  }, SPIN_MS + 150);
+}
+
+/* ================= 状态 / 弹窗 ================= */
+
+function updateStatus(){
+  const el = document.getElementById('status');
+  if(spinning) el.textContent = '转动中…';
+  else if(lastResult) el.textContent = `上次结果:${lastResult.name}`;
+  else if(!items.length) el.textContent = '还没有选项,点右上角添加';
+  else el.textContent = '点击转盘或下方按钮开始';
+}
+function updateSpinBtn(){
+  const b = document.getElementById('spinBtn');
+  b.disabled = spinning || !items.length;
+  b.textContent = spinning ? '转动中…' : '开始抽取';
+}
+function showResult(item){
+  document.getElementById('resultName').textContent = item.name;
+  document.getElementById('resultOverlay').hidden = false;
+}
+function hideResult(){
+  document.getElementById('resultOverlay').hidden = true;
+}
+
+/* ================= 选项管理 ================= */
+
+function renderList(){
+  const ul = document.getElementById('itemList');
+  if(!items.length){
+    ul.innerHTML = '<li class="empty">暂无选项,在下方添加</li>';
+    return;
+  }
+  ul.innerHTML = items.map((it, i) => {
+    if(editingId === it.id){
+      return `<li data-id="${it.id}">` +
+        `<input class="editInput" value="${escapeHtml(it.name)}" maxlength="30">` +
+        `<span class="ops"><button data-act="save">完成</button>` +
+        `<button data-act="cancel" class="danger">取消</button></span></li>`;
+    }
+    return `<li data-id="${it.id}">` +
+      `<span class="dot" style="background:${color(i)}"></span>` +
+      `<span class="name">${escapeHtml(it.name)}</span>` +
+      `<span class="ops">` +
+        `<button data-act="up" ${i === 0 ? 'disabled' : ''}>↑</button>` +
+        `<button data-act="down" ${i === items.length - 1 ? 'disabled' : ''}>↓</button>` +
+        `<button data-act="edit">编辑</button>` +
+        `<button data-act="del" class="danger">删除</button>` +
+      `</span></li>`;
+  }).join('');
+
+  const input = ul.querySelector('.editInput');
+  if(input){
+    input.focus();
+    input.select();
+  }
+}
+
+/* ================= 事件绑定 ================= */
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === id));
+}
+
+document.getElementById('wheelWrap').addEventListener('click', spin);
+document.getElementById('spinBtn').addEventListener('click', spin);
+document.getElementById('againBtn').addEventListener('click', () => { hideResult(); spin(); });
+document.getElementById('okBtn').addEventListener('click', hideResult);
+document.getElementById('resultOverlay').addEventListener('click', e => {
+  if(e.target.id === 'resultOverlay') hideResult();
+});
+
+document.getElementById('manageBtn').addEventListener('click', () => {
+  editingId = null;
+  renderList();
+  showPage('pageManage');
+});
+document.getElementById('backBtn').addEventListener('click', () => showPage('pageWheel'));
+
+document.getElementById('addBtn').addEventListener('click', () => {
+  const input = document.getElementById('newName');
+  const name = input.value.trim();
+  if(!name) return;
+  items.push({id: uid(), name});
+  input.value = '';
+  commit();
+  document.getElementById('newName').focus();
+});
+document.getElementById('newName').addEventListener('keydown', e => {
+  if(e.key === 'Enter') document.getElementById('addBtn').click();
+});
+
+document.getElementById('itemList').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  const li = btn.closest('li');
+  if(!li || !li.dataset.id) return;
+  const id = li.dataset.id;
+  const i = items.findIndex(x => x.id === id);
+  if(i < 0) return;
+
+  switch(btn.dataset.act){
+    case 'del':
+      items.splice(i, 1);
+      commit();
+      break;
+    case 'up':
+      if(i > 0){ [items[i-1], items[i]] = [items[i], items[i-1]]; commit(); }
+      break;
+    case 'down':
+      if(i < items.length - 1){ [items[i], items[i+1]] = [items[i+1], items[i]]; commit(); }
+      break;
+    case 'edit':
+      editingId = id;
+      renderList();
+      break;
+    case 'save': {
+      const v = li.querySelector('.editInput').value.trim();
+      if(v){ items[i].name = v; editingId = null; commit(); }
+      break;
+    }
+    case 'cancel':
+      editingId = null;
+      renderList();
+      break;
+  }
+});
+
+/* ================= Service Worker(仅 https 或 localhost 下生效) ================= */
+
+if('serviceWorker' in navigator &&
+   (location.protocol === 'https:' || ['localhost','127.0.0.1'].includes(location.hostname))){
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+/* ================= 初始化 ================= */
+
+renderWheel();
+renderList();
+updateStatus();
+updateSpinBtn();
+</script>
+</body>
+</html>
